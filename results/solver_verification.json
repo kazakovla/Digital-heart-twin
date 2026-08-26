@@ -1,0 +1,8 @@
+{
+  "constitutive_dPsi_dF_vs_finite_diff": "пройдено (< 1e-6)",
+  "material_tangent_dP_dF_vs_finite_diff": "пройдено (< 1e-6)",
+  "global_residual_vs_dPi_du": "пройдено (< 1e-6)",
+  "global_tangent_symmetry_and_fd": "пройдено (< 1e-6)",
+  "patch_test_uniaxial_F_exact": "пройдено (< 1e-12)",
+  "patch_test_force_equilibrium": "пройдено (< 1e-10)"
+}
