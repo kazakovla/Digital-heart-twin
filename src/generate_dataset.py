@@ -28,6 +28,7 @@ import time
 
 import numpy as np
 
+from fem_core import ENDO_LV, ENDO_RV, cavity_volume_closed
 from fem_solver import Geometry, Loading, Material, solve
 
 RANGES = {
@@ -83,6 +84,10 @@ def run_geometry(geom_path: str, n_samples: int, out_dir: str,
 
     geo, meta = load_geometry(geom_path)
     params = sample_params(n_samples, seed)
+    f_lv = geo.faces[geo.face_type == ENDO_LV]
+    f_rv = geo.faces[geo.face_type == ENDO_RV]
+    v0_lv = cavity_volume_closed(geo.coords, f_lv)
+    v0_rv = cavity_volume_closed(geo.coords, f_rv)
 
     disp, kept, infos = [], [], []
     t_total = time.time()
@@ -96,12 +101,23 @@ def run_geometry(geom_path: str, n_samples: int, out_dir: str,
         if not info["ok"]:
             print(f"[{case}] {i:3d} расходимость, отброшено")
             continue
+        # Физический контроль: при диастолическом давлении полости должны
+        # РАСШИРЯТЬСЯ. Именно этой проверки не хватало в первой версии.
+        dv_lv = cavity_volume_closed(geo.coords + u, f_lv) / v0_lv - 1.0
+        dv_rv = cavity_volume_closed(geo.coords + u, f_rv) / v0_rv - 1.0
+        if dv_lv <= 0 or dv_rv <= 0:
+            raise RuntimeError(
+                f"[{case}] объём полости уменьшился под давлением "
+                f"(dV_LV={dv_lv:+.3f}, dV_RV={dv_rv:+.3f}) -- проверьте "
+                f"ориентацию граней (src/fix_face_orientation.py)")
         disp.append(u.astype(np.float32))
         kept.append(p)
-        infos.append((dt, info["iters"], info["u_max"], info["J_min"]))
+        infos.append((dt, info["iters"], info["u_max"], info["J_min"],
+                      dv_lv, dv_rv))
         print(
             f"[{case}] {i:3d}/{n_samples} {dt:5.1f}s it={info['iters']:2d} "
-            f"u_max={info['u_max']:5.2f} мм J=[{info['J_min']:.3f}..{info['J_max']:.3f}]"
+            f"u_max={info['u_max']:5.2f} мм J=[{info['J_min']:.3f}..{info['J_max']:.3f}] "
+            f"dV_LV={dv_lv * 100:+.1f}% dV_RV={dv_rv * 100:+.1f}%"
         )
 
     os.makedirs(out_dir, exist_ok=True)

@@ -91,13 +91,39 @@ def boundary_faces(elements: np.ndarray) -> np.ndarray:
     return f[idx[cnt == 1]]
 
 
-def outward_orient(coords: np.ndarray, faces: np.ndarray) -> np.ndarray:
-    """Ориентирует граничные треугольники наружу (по знаку объёма)."""
+def outward_orient(coords: np.ndarray, faces: np.ndarray,
+                   elements: np.ndarray) -> np.ndarray:
+    """
+    Ориентирует граничные треугольники по ВНЕШНЕЙ нормали области миокарда.
+
+    Внешняя нормаль грани направлена от противолежащей вершины тетраэдра,
+    которому принадлежит грань. Это корректно для любой поверхности,
+    в том числе для эндокарда, где внешняя нормаль миокарда смотрит
+    в полость желудочка (к центру сердца).
+
+    ИСПРАВЛЕНИЕ (по замечанию руководителя): прежняя версия ориентировала
+    нормали «от центра масс сетки». Для внутренних поверхностей (эндокард)
+    это переворачивало нормаль, и давление в полости сжимало сердце вместо
+    наполнения. См. src/fix_face_orientation.py.
+    """
+    key = np.sort(faces, axis=1)
+    # все грани всех тетраэдров + противолежащая вершина
+    loc = np.array([[0, 1, 2, 3], [0, 1, 3, 2], [0, 2, 3, 1], [1, 2, 3, 0]])
+    tri = elements[:, loc[:, :3]].reshape(-1, 3)
+    opp = elements[:, loc[:, 3]].reshape(-1)
+    tkey = np.sort(tri, axis=1)
+    # сопоставление граничной грани и тетраэдра через лексикографическую сортировку
+    order = np.lexsort(tkey.T[::-1])
+    tkey_s, opp_s = tkey[order], opp[order]
+    pos = np.searchsorted(
+        tkey_s.view([("", tkey_s.dtype)] * 3).ravel(),
+        np.ascontiguousarray(key).view([("", key.dtype)] * 3).ravel())
+    opp_v = coords[opp_s[pos]]
+
     p0, p1, p2 = coords[faces[:, 0]], coords[faces[:, 1]], coords[faces[:, 2]]
     n = np.cross(p1 - p0, p2 - p0)
     c = (p0 + p1 + p2) / 3.0
-    centre = coords.mean(axis=0)
-    flip = np.einsum("ij,ij->i", n, c - centre) < 0
+    flip = np.einsum("ij,ij->i", n, c - opp_v) < 0
     out = faces.copy()
     out[flip] = out[flip][:, [0, 2, 1]]
     return out
@@ -169,7 +195,7 @@ def prepare_case(case: str, raw_dir: str, out_dir: str,
     is_lv_node = (node_lv / np.maximum(node_cnt, 1)) > 0.5
 
     # --- 5. классификация границы ----------------------------------------
-    faces = outward_orient(coords, boundary_faces(elements))
+    faces = outward_orient(coords, boundary_faces(elements), elements)
     f_rho = rho[faces].mean(axis=1)
     f_z = zc[faces].mean(axis=1)
     f_v = vc[faces].mean(axis=1)
