@@ -43,4 +43,4 @@ cd .. && python generate_illustrations.py && python heartsim_sage.py
   from CT images. Zenodo, 2021, record 4590294 (CC BY 4.0).
 - Shi L., Chen Y., Vedula V. HeartSimSage. arXiv:2504.18968, 2025 — [15].
 
-Что изменено по замечаниям руководителя — см. `CHANGELOG.md`.
+Доп информация — см. `CHANGELOG.md`.
